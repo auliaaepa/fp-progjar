@@ -45,6 +45,8 @@ def main():
         request_header = get_request_header(request_method, request_urn, request_protocol, host, port)
         client_socket.sendall(request_header.encode())
     elif request_method == "HEAD":
+        # request_header = get_request_header(request_method, request_urn, request_protocol, host, port)
+        # client_socket.sendall(request_header.encode())
         pass
     elif request_method == "POST":
         content_type = "application/x-www-form-urlencoded"
