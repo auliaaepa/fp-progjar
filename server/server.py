@@ -115,8 +115,9 @@ class ServerResponseThread(threading.Thread):
                     response_header = self.get_response_header(response_status, content_mime, content_length)
             else:
                 # send response in the form of 404 if urn invalid 
-                with open("404.html", "rb") as file:
-                    response_content = file.read()
+                response_content = self.get_html_file(
+                    "404 Not Found"
+                ).encode()
                 response_status = "404 Not Found"
                 content_mime = "text/html"
                 content_length = len(response_content)
