@@ -45,14 +45,25 @@ class ServerResponseThread(threading.Thread):
         if request_file == "": request_file = "index.html"
         
         if request_method == "GET":
-            if os.path.isfile(request_file) and (request_file == "index.html" or request_file == "registrasi.html"):
-                # send response in the form of requested file
-                with open(request_file, "rb") as file:
-                    response_content = file.read()
-                response_status = "200 OK"
-                content_mime = mimetypes.guess_type(request_file)[0]
-                content_length = len(response_content)
-                response_header = self.get_response_header(response_status, content_mime, content_length)
+            if os.path.isfile(request_file): 
+                if request_file == "index.html" or request_file == "registrasi.html":
+                    # send response in the form of requested file
+                    with open(request_file, "rb") as file:
+                        response_content = file.read()
+                    response_status = "200 OK"
+                    content_mime = mimetypes.guess_type(request_file)[0]
+                    content_length = len(response_content)
+                    response_header = self.get_response_header(response_status, content_mime, content_length)
+                elif request_file == "private.html":
+                    # send response in the form of forbidden
+                    response_content = self.get_html_file(
+                        "403 Forbidden",
+                        "You cannot access private files"
+                    ).encode()
+                    response_status = "403 Forbidden"
+                    content_mime = mimetypes.guess_type(request_file)[0]
+                    content_length = len(response_content)
+                    response_header = self.get_response_header(response_status, content_mime, content_length)
             else:
                 # send response in the form of 404 if urn invalid 
                 response_content = self.get_html_file(
@@ -72,8 +83,8 @@ class ServerResponseThread(threading.Thread):
                             email = input.split("=")[1]
                         elif "password" in input:
                             password = input.split("=")[1]
-                    # send response in the form of success message                  
                     if len(body_split) == 2 and email is not None and password is not None:
+                        # send response in the form of success message 
                         response_content = self.get_html_file(
                             "Registrasi Berhasil", 
                             "Silahkan verifikasi akun Anda melalui email yang Anda daftarkan"
@@ -82,23 +93,23 @@ class ServerResponseThread(threading.Thread):
                         content_mime = "text/html"
                         content_length = len(response_content)
                         response_header = self.get_response_header(response_status, content_mime, content_length)
-                    # send response in the form of bad request if syntax error
-                    else:                       
+                    else: 
+                        # send response in the form of bad request if syntax error
                         response_content = self.get_html_file(
                             "400 Bad Request", 
                             "Invalid syntax"
                         ).encode()
-                        response_status = "400 Bad Request"                
+                        response_status = "400 Bad Request"
                         content_mime = "text/html"
                         content_length = len(response_content)
                         response_header = self.get_response_header(response_status, content_mime, content_length)
-                # send response in the form of bad request if syntax error
                 else:
+                    # send response in the form of bad request if syntax error
                     response_content = self.get_html_file(
                         "400 Bad Request", 
                         "Invalid syntax"
                     ).encode()
-                    response_status = "400 Bad Request"                
+                    response_status = "400 Bad Request"
                     content_mime = "text/html"
                     content_length = len(response_content)
                     response_header = self.get_response_header(response_status, content_mime, content_length)
