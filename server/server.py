@@ -110,7 +110,15 @@ class ServerResponseThread(threading.Thread):
                 content_mime = "text/html"
                 content_length = len(response_content)
                 response_header = self.get_response_header(response_status, content_mime, content_length)
-        
+        elif request_method == "HEAD":
+            if os.path.isfile(request_file):
+                with open(request_file, "rb") as file:
+                    response_content = file.read()
+                response_status = "200 OK"
+                content_mime = "text/html"
+                content_length = len(response_content)
+                response_header = self.get_response_header(response_status, content_mime, content_length)
+                
         # send response
         client_socket.sendall(response_header.encode()+response_content)
         print("SEND", client_socket.getpeername(), response_status)
