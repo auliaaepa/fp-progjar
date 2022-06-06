@@ -7,7 +7,6 @@ import configparser
 import mimetypes
 import datetime
 from wsgiref.handlers import format_date_time
-import time
 
 from requests import request
 
@@ -21,9 +20,9 @@ class ServerResponseThread(threading.Thread):
         self.running = True
         self.q = queue.Queue()
 
-    def add(self, client_socket, request_method, request_urn, request_protocol, request_body):
-        """put tuple (client socket, request method, request urn, request protocol, request body) to queue"""
-        self.q.put((client_socket, request_method, request_urn, request_protocol, request_body))
+    def add(self, client_socket, request_method, request_urn, request_body):
+        """put tuple (client socket, request method, request urn, request body) to queue"""
+        self.q.put((client_socket, request_method, request_urn, request_body))
 
     def stop(self):
         """stop server"""
@@ -33,12 +32,12 @@ class ServerResponseThread(threading.Thread):
         """respond to the client in the queue when server running"""
         while self.running:
             try:
-                client_socket, request_method, request_urn, request_protocol, request_body = self.q.get(block=True, timeout=1)
-                self.send_response(client_socket, request_method, request_urn, request_protocol, request_body)
+                client_socket, request_method, request_urn, request_body = self.q.get(block=True, timeout=1)
+                self.send_response(client_socket, request_method, request_urn, request_body)
             except queue.Empty:
                 pass
     
-    def send_response(self, client_socket, request_method, request_urn, request_protocol, request_body):
+    def send_response(self, client_socket, request_method, request_urn, request_body):
         """send a response to client socket based on client request"""
         # get requested file name
         request_file = request_urn
@@ -46,8 +45,8 @@ class ServerResponseThread(threading.Thread):
         if request_file == "": request_file = "index.html"
         
         if request_method == "GET":
-            if os.path.isfile(request_file):
-                # send response in the form of file attachment
+            if os.path.isfile(request_file) and (request_file == "index.html" or request_file == "registrasi.html"):
+                # send response in the form of requested file
                 with open(request_file, "rb") as file:
                     response_content = file.read()
                 response_status = "200 OK"
@@ -55,31 +54,56 @@ class ServerResponseThread(threading.Thread):
                 content_length = len(response_content)
                 response_header = self.get_response_header(response_status, content_mime, content_length)
             else:
-                # send response in the form of 404.html if urn invalid 
-                with open("404.html", "rb") as file:
-                    response_content = file.read()
+                # send response in the form of 404 if urn invalid 
+                response_content = self.get_html_file(
+                    "404 Not Found"
+                ).encode()
                 response_status = "404 Not Found"
                 content_mime = "text/html"
                 content_length = len(response_content)
                 response_header = self.get_response_header(response_status, content_mime, content_length)
         elif request_method == "POST":
-            if request_file == "registrasi.html":
+            if os.path.isfile(request_file) and request_file == "registrasi.html":
                 if request_body != "":
                     body_split = request_body.split("&")
+                    email, password = None, None
                     for input in body_split:
                         if "email" in input:
-                            email = input.split("=")
+                            email = input.split("=")[1]
                         elif "password" in input:
-                            password = input.split("=")                    
-                    if len(body_split) == 2 and email and password:
-                        with open("sukses.html", "rb") as file:
-                            response_content = file.read()
+                            password = input.split("=")[1]
+                    # send response in the form of success message                  
+                    if len(body_split) == 2 and email is not None and password is not None:
+                        response_content = self.get_html_file(
+                            "Registrasi Berhasil", 
+                            "Silahkan verifikasi akun Anda melalui email yang Anda daftarkan"
+                        ).encode()
                         response_status = "200 OK"
                         content_mime = "text/html"
                         content_length = len(response_content)
                         response_header = self.get_response_header(response_status, content_mime, content_length)
+                    # send response in the form of bad request if syntax error
+                    else:                       
+                        response_content = self.get_html_file(
+                            "400 Bad Request", 
+                            "Invalid syntax"
+                        ).encode()
+                        response_status = "400 Bad Request"                
+                        content_mime = "text/html"
+                        content_length = len(response_content)
+                        response_header = self.get_response_header(response_status, content_mime, content_length)
+                # send response in the form of bad request if syntax error
+                else:
+                    response_content = self.get_html_file(
+                        "400 Bad Request", 
+                        "Invalid syntax"
+                    ).encode()
+                    response_status = "400 Bad Request"                
+                    content_mime = "text/html"
+                    content_length = len(response_content)
+                    response_header = self.get_response_header(response_status, content_mime, content_length)
             else:
-                # send response in the form of 404.html if urn invalid 
+                # send response in the form of 404 if urn invalid 
                 with open("404.html", "rb") as file:
                     response_content = file.read()
                 response_status = "404 Not Found"
@@ -94,10 +118,10 @@ class ServerResponseThread(threading.Thread):
                 content_mime = "text/html"
                 content_length = len(response_content)
                 response_header = self.get_response_header(response_status, content_mime, content_length)
-        
+                
         # send response
         client_socket.sendall(response_header.encode()+response_content)
-        print("SEND", client_socket.getpeername())
+        print("SEND", client_socket.getpeername(), response_status)
 
     def get_response_header(self, status, mime, length):
         """generate response header"""
@@ -107,6 +131,30 @@ class ServerResponseThread(threading.Thread):
         response_header += "Date: " + format_date_time(datetime.datetime.utcnow().timestamp()) + "\r\n"
         response_header += "\r\n"
         return response_header
+    
+    def get_html_file(self, status, description=None):
+        response_content = f"""
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta http-equiv="X-UA-Compatible" content="IE=edge">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>{status}</title>
+        </head>
+        <body>
+            <h2>{status}</h2>
+        """
+
+        if description: response_content += f"""
+            <p>{description}</p>
+        """
+
+        response_content += """
+        </body>
+        </html>
+        """
+        return response_content
+        
 
 def main():
     # initialize ServerResponseThread object and start it
@@ -122,8 +170,8 @@ def main():
     config.read(CONF_FILE)
     host = "localhost"
     port = int(config[host]["Port"])
-    print("Server address:", host, port)
     server_socket.bind((host, port))
+    print("Server bind to :", server_socket.getsockname())
 
     # listen to client
     server_socket.listen(BACKLOG)
@@ -132,9 +180,7 @@ def main():
         try:
             # accept client
             client_socket, client_address = server_socket.accept()
-            # time.sleep(5)
             ready = select.select([client_socket, ], [], [], 2)
-            # print(ready)
             if ready[0]:
                 # receive request and send response to the valid request
                 client_request = ready[0][0].recv(RECV_BUF).decode()
@@ -147,8 +193,8 @@ def main():
                             request_length = int(header.split()[1])
                             while len(request_body) < request_length:
                                 request_body += client_socket.recv(RECV_BUF).decode()
-                    print("RECV", ready[0][0].getpeername(), request_method, request_urn, request_protocol)
-                    server_response.add(ready[0][0], request_method, request_urn, request_protocol, request_body)
+                    print("RECV", ready[0][0].getpeername(), request_method, request_urn, request_protocol, request_body)
+                    server_response.add(ready[0][0], request_method, request_urn, request_body)
 
         except KeyboardInterrupt:
             print("Stop")

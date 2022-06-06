@@ -44,31 +44,42 @@ def main():
     if request_method == "GET":
         request_header = get_request_header(request_method, request_urn, request_protocol, host, port)
         client_socket.sendall(request_header.encode())
+        response = client_socket.recv(RECV_BUF).decode()
+        response_header, response_body = tuple(response.split("\r\n\r\n"))
+        header_split = response_header.split("\r\n")
+        for header in header_split[1:]:
+            if "Content-Length" in header:
+                response_length = int(header.split()[1])                
+                while len(response_body) < response_length:
+                    response_body += client_socket.recv(RECV_BUF).decode()
+        response_body = "".join(line.strip() for line in response_body.split("\n"))
+        soup = BeautifulSoup(response_body, "html.parser")
+        tag = soup.find('body')
+        for string in tag.strings:
+            print(string)
     elif request_method == "HEAD":
-        # request_header = get_request_header(request_method, request_urn, request_protocol, host, port)
-        # client_socket.sendall(request_header.encode())
-        pass
+        request_header = get_request_header(request_method, request_urn, request_protocol, host, port)
+        client_socket.sendall(request_header.encode())
+        response = client_socket.recv(RECV_BUF).decode()
+        response_header, response_body = tuple(response.split("\r\n\r\n"))
+        print(response_header)
     elif request_method == "POST":
         content_type = "application/x-www-form-urlencoded"
         request_header = get_request_header(request_method, request_urn, request_protocol, host, port, content_type, len(request_body))
         client_socket.sendall(request_header.encode() + request_body.encode())
-
-    response = client_socket.recv(RECV_BUF).decode()
-    response_header, response_body = tuple(response.split("\r\n\r\n"))
-
-    header_split = response_header.split("\r\n")
-    # response_http, response_status, response_desc = tuple(header_split[0].split())
-    # print(header_split[0])
-    for header in header_split[1:]:
-        if "Content-Length" in header:
-            response_length = int(header.split()[1])                
-            while len(response_body) < response_length:
-                response_body += client_socket.recv(RECV_BUF).decode()
-    response_body = "".join(line.strip() for line in response_body.split("\n"))
-    soup = BeautifulSoup(response_body, "html.parser")
-    tag = soup.find('body')
-    for string in tag.strings:
-        print(string)
+        response = client_socket.recv(RECV_BUF).decode()
+        response_header, response_body = tuple(response.split("\r\n\r\n"))
+        header_split = response_header.split("\r\n")
+        for header in header_split[1:]:
+            if "Content-Length" in header:
+                response_length = int(header.split()[1])                
+                while len(response_body) < response_length:
+                    response_body += client_socket.recv(RECV_BUF).decode()
+        response_body = "".join(line.strip() for line in response_body.split("\n"))
+        soup = BeautifulSoup(response_body, "html.parser")
+        tag = soup.find('body')
+        for string in tag.strings:
+            print(string)
 
 if __name__ == "__main__":
     main()
