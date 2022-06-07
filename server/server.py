@@ -70,7 +70,8 @@ class ServerResponseThread(threading.Thread):
                     response_status = "301 Moved Permanently"
                     content_mime = mimetypes.guess_type(request_file)[0]
                     content_length = len(response_content)
-                    response_header = self.get_response_header(response_status, content_mime, content_length)
+                    location = "/news.html"
+                    response_header = self.get_response_header(response_status, content_mime, content_length, location)
             else:
                 # send response in the form of 404 if urn invalid 
                 response_content = self.get_html_file(
@@ -110,6 +111,7 @@ class ServerResponseThread(threading.Thread):
                         content_mime = "text/html"
                         content_length = len(response_content)
                         response_header = self.get_response_header(response_status, content_mime, content_length)
+                        
                 else:
                     # send response in the form of bad request if syntax error
                     response_content = self.get_html_file(
@@ -134,12 +136,14 @@ class ServerResponseThread(threading.Thread):
         client_socket.sendall(response_header.encode()+response_content)
         print("SEND", client_socket.getpeername(), response_status)
 
-    def get_response_header(self, status, mime, length):
+    def get_response_header(self, status, mime, length, location=None):
         """generate response header"""
         response_header = "HTTP/1.1 " + status + "\r\n"
         response_header += "Content-Type: " + mime + "; charset=UTF-8\r\n"
         response_header += "Content-Length: " + str(length) + "\r\n"
         response_header += "Date: " + format_date_time(datetime.datetime.utcnow().timestamp()) + "\r\n"
+        if location:
+            response_header += "Location: " + location + "\r\n"
         response_header += "\r\n"
         return response_header
     
