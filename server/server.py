@@ -44,7 +44,7 @@ class ServerResponseThread(threading.Thread):
         if request_file[0] == "/": request_file = request_file[1:]
         if request_file == "": request_file = "index.html"
         
-        if request_method == "GET":
+        if request_method == "GET" or request_method == "HEAD":
             if os.path.isfile(request_file): 
                 if request_file == "index.html" or request_file == "registrasi.html":
                     # send response in the form of requested file
@@ -61,6 +61,13 @@ class ServerResponseThread(threading.Thread):
                         "You cannot access private files"
                     ).encode()
                     response_status = "403 Forbidden"
+                    content_mime = mimetypes.guess_type(request_file)[0]
+                    content_length = len(response_content)
+                    response_header = self.get_response_header(response_status, content_mime, content_length)
+                elif request_file == "article.html":
+                    with open(request_file, "rb") as file:
+                        response_content = file.read()
+                    response_status = "301 Moved Permanently"
                     content_mime = mimetypes.guess_type(request_file)[0]
                     content_length = len(response_content)
                     response_header = self.get_response_header(response_status, content_mime, content_length)
@@ -119,14 +126,6 @@ class ServerResponseThread(threading.Thread):
                     "404 Not Found"
                 ).encode()
                 response_status = "404 Not Found"
-                content_mime = "text/html"
-                content_length = len(response_content)
-                response_header = self.get_response_header(response_status, content_mime, content_length)
-        elif request_method == "HEAD":
-            if os.path.isfile(request_file):
-                with open(request_file, "rb") as file:
-                    response_content = file.read()
-                response_status = "200 OK"
                 content_mime = "text/html"
                 content_length = len(response_content)
                 response_header = self.get_response_header(response_status, content_mime, content_length)

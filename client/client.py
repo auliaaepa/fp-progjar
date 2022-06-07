@@ -43,7 +43,9 @@ def main():
 
     if request_method == "GET":
         request_header = get_request_header(request_method, request_urn, request_protocol, host, port)
+        # send request to server
         client_socket.sendall(request_header.encode())
+        # receive response from server and parsing the reponse body
         response = client_socket.recv(RECV_BUF).decode()
         response_header, response_body = tuple(response.split("\r\n\r\n"))
         header_split = response_header.split("\r\n")
@@ -59,7 +61,9 @@ def main():
             print(string)
     elif request_method == "HEAD":
         request_header = get_request_header(request_method, request_urn, request_protocol, host, port)
+        # send request to server
         client_socket.sendall(request_header.encode())
+        # receive response from server and only print reponse header
         response = client_socket.recv(RECV_BUF).decode()
         response_header, response_body = tuple(response.split("\r\n\r\n"))
         print(response_header)
