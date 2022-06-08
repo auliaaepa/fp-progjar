@@ -1,9 +1,10 @@
 import socket
+import os
 import sys
 import datetime
-from wsgiref.handlers import format_date_time
-from bs4 import BeautifulSoup
 import argparse
+from bs4 import BeautifulSoup
+from wsgiref.handlers import format_date_time
 
 # define receive buffer size
 RECV_BUF = 4096
@@ -42,35 +43,62 @@ def main():
     client_socket.connect((host, port))
 
     if request_method == "GET":
-        request_header = get_request_header(request_method, request_urn, request_protocol, host, port)
         # send request to server
+        request_header = get_request_header(request_method, request_urn, request_protocol, host, port)
         client_socket.sendall(request_header.encode())
-        # receive response from server and parsing the reponse body
+
+        # receive response from server
         response = client_socket.recv(RECV_BUF).decode()
         response_header, response_body = tuple(response.split("\r\n\r\n"))
-        header_split = response_header.split("\r\n")
-        for header in header_split[1:]:
+        response_location = None
+        for header in response_header.split("\r\n")[1:]:
             if "Content-Length" in header:
                 response_length = int(header.split()[1])                
                 while len(response_body) < response_length:
                     response_body += client_socket.recv(RECV_BUF).decode()
+            elif "Location" in header:
+                response_location = header.split()[1]
+        
+        # parsing the reponse body
         response_body = "".join(line.strip() for line in response_body.split("\n"))
         soup = BeautifulSoup(response_body, "html.parser")
         tag = soup.find('body')
         for string in tag.strings:
             print(string)
+        
+        # redirection
+        if response_location:
+            print("===REDIRECTION===")
+            python_version = "python3" if sys.version_info[0]==3 else "python"
+            os.system(f"{python_version} client.py {host} {port} --method {request_method} --urn {response_location} --protocol {request_protocol}")
     elif request_method == "HEAD":
-        request_header = get_request_header(request_method, request_urn, request_protocol, host, port)
         # send request to server
+        request_header = get_request_header(request_method, request_urn, request_protocol, host, port)
         client_socket.sendall(request_header.encode())
-        # receive response from server and only print reponse header
+
+        # receive response from server
         response = client_socket.recv(RECV_BUF).decode()
         response_header, response_body = tuple(response.split("\r\n\r\n"))
+        response_location = None
+        for header in response_header.split("\r\n")[1:]:
+            if "Location" in header:
+                response_location = header.split()[1]
+
+        # only print reponse header
         print(response_header)
+        
+        # redirection
+        if response_location:
+            print("===REDIRECTION===")
+            python_version = "python3" if sys.version_info[0]==3 else "python"
+            os.system(f"{python_version} client.py {host} {port} --method {request_method} --urn {response_location} --protocol {request_protocol}")
     elif request_method == "POST":
+        # send request to server
         content_type = "application/x-www-form-urlencoded"
         request_header = get_request_header(request_method, request_urn, request_protocol, host, port, content_type, len(request_body))
         client_socket.sendall(request_header.encode() + request_body.encode())
+
+        # receive response from server
         response = client_socket.recv(RECV_BUF).decode()
         response_header, response_body = tuple(response.split("\r\n\r\n"))
         header_split = response_header.split("\r\n")
@@ -79,6 +107,8 @@ def main():
                 response_length = int(header.split()[1])                
                 while len(response_body) < response_length:
                     response_body += client_socket.recv(RECV_BUF).decode()
+        
+        # parsing the reponse body
         response_body = "".join(line.strip() for line in response_body.split("\n"))
         soup = BeautifulSoup(response_body, "html.parser")
         tag = soup.find('body')

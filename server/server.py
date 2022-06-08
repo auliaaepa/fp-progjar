@@ -20,9 +20,9 @@ class ServerResponseThread(threading.Thread):
         self.running = True
         self.q = queue.Queue()
 
-    def add(self, client_socket, request_method, request_urn, request_body):
-        """put tuple (client socket, request method, request urn, request body) to queue"""
-        self.q.put((client_socket, request_method, request_urn, request_body))
+    def add(self, client_socket, host, port, request_method, request_urn, request_body):
+        """put tuple (client socket, host, port, request method, request urn, request body) to queue"""
+        self.q.put((client_socket, host, port, request_method, request_urn, request_body))
 
     def stop(self):
         """stop server"""
@@ -32,12 +32,12 @@ class ServerResponseThread(threading.Thread):
         """respond to the client in the queue when server running"""
         while self.running:
             try:
-                client_socket, request_method, request_urn, request_body = self.q.get(block=True, timeout=1)
-                self.send_response(client_socket, request_method, request_urn, request_body)
+                client_socket, host, port, request_method, request_urn, request_body = self.q.get(block=True, timeout=1)
+                self.send_response(client_socket, host, port, request_method, request_urn, request_body)
             except queue.Empty:
                 pass
     
-    def send_response(self, client_socket, request_method, request_urn, request_body):
+    def send_response(self, client_socket, host, port, request_method, request_urn, request_body):
         """send a response to client socket based on client request"""
         # get requested file name
         request_file = request_urn
@@ -45,8 +45,18 @@ class ServerResponseThread(threading.Thread):
         if request_file == "": request_file = "index.html"
         
         if request_method == "GET" or request_method == "HEAD":
-            if os.path.isfile(request_file): 
-                if request_file == "index.html" or request_file == "registrasi.html":
+            if os.path.isfile(request_file):                 
+                if request_file == "private.html" or request_file == "httpserver.conf":
+                    # send response in the form of forbidden
+                    response_content = self.get_html_file(
+                        "403 Forbidden",
+                        "You cannot access private files"
+                    ).encode()
+                    response_status = "403 Forbidden"
+                    content_mime = "text/html"
+                    content_length = len(response_content)
+                    response_header = self.get_response_header(response_status, content_mime, content_length)
+                else:
                     # send response in the form of requested file
                     with open(request_file, "rb") as file:
                         response_content = file.read()
@@ -54,26 +64,19 @@ class ServerResponseThread(threading.Thread):
                     content_mime = mimetypes.guess_type(request_file)[0]
                     content_length = len(response_content)
                     response_header = self.get_response_header(response_status, content_mime, content_length)
-                elif request_file == "private.html":
-                    # send response in the form of forbidden
-                    response_content = self.get_html_file(
-                        "403 Forbidden",
-                        "You cannot access private files"
-                    ).encode()
-                    response_status = "403 Forbidden"
-                    content_mime = mimetypes.guess_type(request_file)[0]
-                    content_length = len(response_content)
-                    response_header = self.get_response_header(response_status, content_mime, content_length)
-                elif request_file == "article.html":
-                    with open(request_file, "rb") as file:
-                        response_content = file.read()
-                    response_status = "301 Moved Permanently"
-                    content_mime = mimetypes.guess_type(request_file)[0]
-                    content_length = len(response_content)
-                    location = "/news.html"
-                    response_header = self.get_response_header(response_status, content_mime, content_length, location)
+            elif request_file == "article.html":
+                # send response in the form of redirection
+                response_content = self.get_html_file(
+                    "301 Moved Permanently",
+                    f"This page is moved to <a href='{host}:{port}/news.html'>{host}:{port}/news.html</a>"
+                ).encode()
+                response_status = "301 Moved Permanently"
+                content_mime = "text/html"
+                content_length = len(response_content)
+                location = "/news.html"
+                response_header = self.get_response_header(response_status, content_mime, content_length, location)
             else:
-                # send response in the form of 404 if urn invalid 
+                # send response in the form of 404 
                 response_content = self.get_html_file(
                     "404 Not Found"
                 ).encode()
@@ -81,49 +84,61 @@ class ServerResponseThread(threading.Thread):
                 content_mime = "text/html"
                 content_length = len(response_content)
                 response_header = self.get_response_header(response_status, content_mime, content_length)
+            if request_method == "HEAD":
+                response_content = b""
         elif request_method == "POST":
-            if os.path.isfile(request_file) and request_file == "registrasi.html":
-                if request_body != "":
-                    body_split = request_body.split("&")
-                    email, password = None, None
-                    for input in body_split:
-                        if "email" in input:
-                            email = input.split("=")[1]
-                        elif "password" in input:
-                            password = input.split("=")[1]
-                    if len(body_split) == 2 and email is not None and password is not None:
-                        # send response in the form of success message 
+            if os.path.isfile(request_file):
+                if request_file == "registrasi.html":
+                    try:
+                        body_split = request_body.split("&")
+                        email, password = None, None
+                        for input in body_split:
+                            if "email" in input: # to prevent internal server error, add len(input.split("="))==2 to if
+                                email = input.split("=")[1]
+                            elif "password" in input: # to prevent internal server error, add len(input.split("="))==2 to if
+                                password = input.split("=")[1]
+                        if len(body_split) == 2 and email is not None and password is not None:
+                            # send response in the form of success message 
+                            response_content = self.get_html_file(
+                                "Registrasi Berhasil", 
+                                "Silahkan verifikasi akun Anda melalui email yang Anda daftarkan"
+                            ).encode()
+                            response_status = "200 OK"
+                            content_mime = "text/html"
+                            content_length = len(response_content)
+                            response_header = self.get_response_header(response_status, content_mime, content_length)
+                        else: 
+                            # send response in the form of bad request if syntax error
+                            response_content = self.get_html_file(
+                                "400 Bad Request", 
+                                "Invalid syntax"
+                            ).encode()
+                            response_status = "400 Bad Request"
+                            content_mime = "text/html"
+                            content_length = len(response_content)
+                            response_header = self.get_response_header(response_status, content_mime, content_length)
+                    except IndexError:
+                        # send response in the form of internal server error
                         response_content = self.get_html_file(
-                            "Registrasi Berhasil", 
-                            "Silahkan verifikasi akun Anda melalui email yang Anda daftarkan"
+                            "500 Internal Server Error", 
+                            "Come back later"
                         ).encode()
-                        response_status = "200 OK"
+                        response_status = "500 Internal Server Error"
                         content_mime = "text/html"
                         content_length = len(response_content)
                         response_header = self.get_response_header(response_status, content_mime, content_length)
-                    else: 
-                        # send response in the form of bad request if syntax error
-                        response_content = self.get_html_file(
-                            "400 Bad Request", 
-                            "Invalid syntax"
-                        ).encode()
-                        response_status = "400 Bad Request"
-                        content_mime = "text/html"
-                        content_length = len(response_content)
-                        response_header = self.get_response_header(response_status, content_mime, content_length)
-                        
                 else:
-                    # send response in the form of bad request if syntax error
+                    # send response in the form of method not allowed
                     response_content = self.get_html_file(
-                        "400 Bad Request", 
-                        "Invalid syntax"
+                        "405 Method Not Allowed", 
+                        "Allowed methods are GET and HEAD"
                     ).encode()
-                    response_status = "400 Bad Request"
+                    response_status = "405 Method Not Allowed"
                     content_mime = "text/html"
                     content_length = len(response_content)
                     response_header = self.get_response_header(response_status, content_mime, content_length)
             else:
-                # send response in the form of 404 if urn invalid 
+                # send response in the form of not found 
                 response_content = self.get_html_file(
                     "404 Not Found"
                 ).encode()
@@ -141,9 +156,8 @@ class ServerResponseThread(threading.Thread):
         response_header = "HTTP/1.1 " + status + "\r\n"
         response_header += "Content-Type: " + mime + "; charset=UTF-8\r\n"
         response_header += "Content-Length: " + str(length) + "\r\n"
+        if location: response_header += "Location: " + location + "\r\n"
         response_header += "Date: " + format_date_time(datetime.datetime.utcnow().timestamp()) + "\r\n"
-        if location:
-            response_header += "Location: " + location + "\r\n"
         response_header += "\r\n"
         return response_header
     
@@ -209,7 +223,7 @@ def main():
                             while len(request_body) < request_length:
                                 request_body += client_socket.recv(RECV_BUF).decode()
                     print("RECV", ready[0][0].getpeername(), request_method, request_urn, request_protocol, request_body)
-                    server_response.add(ready[0][0], request_method, request_urn, request_body)
+                    server_response.add(ready[0][0], host, port, request_method, request_urn, request_body)
 
         except KeyboardInterrupt:
             print("Stop")
